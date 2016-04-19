@@ -1,0 +1,22 @@
+{
+  "name": "go_log_webui",
+  "homepage": "https://github.com/Bruce313/go_log",
+  "authors": [
+    "LiuBing <liubing@xiaohongchun.com>"
+  ],
+  "description": "",
+  "main": "",
+  "moduleType": [],
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "socket.io-client": "^1.4.5"
+  }
+}

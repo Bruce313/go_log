@@ -1,13 +1,41 @@
 package main
 
+import (
+	"github.com/tj/go-debug"
+)
+
+var deLH = debug.Debug("go_log:loghandler")
+
 type logHandler struct {
-	chLog chan<- *oneLog
+	subs  []logSuber
+	chLog <-chan *oneLog
 	nsMap map[string]*namespace
 }
 
-func newLogHandler(ch chan<- *oneLog) *logHandler {
+func newLogHandler(ch <-chan *oneLog) *logHandler {
 	return &logHandler{
 		chLog: ch,
+	}
+}
+
+func (self *logHandler) addSuber(sb logSuber) {
+	self.subs = append(self.subs, sb)
+}
+
+func (self *logHandler) handle() {
+	for {
+		lp, ok := <-self.chLog
+		if !ok {
+			deLH("receive close from chLog, exit")
+			break
+		}
+		//pass log to the chain
+		for _, sb := range self.subs {
+			err := sb.Touch(lp)
+			if err != nil {
+				deLH("sb touch err:", err)
+			}
+		}
 	}
 }
 

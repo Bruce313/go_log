@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/tj/go-debug"
 )
@@ -15,17 +16,36 @@ var deMain = debug.Debug("go_log:main")
 
 func main() {
 	//parse config
-	ip := net.ParseIP("0.0.0.0")
-	port := 3334
+	ip := net.ParseIP("127.0.0.1")
+	portTCP := 3334
+	portHTTP := 3344
+	portWebUI := 3354
 	//chan receive log
 	chLog := make(chan *oneLog, 100)
 	//listen tcp
-	go listenTCP(ip, port, (chan<- *oneLog)(chLog))
+	go listenTCP(ip, portTCP, (chan<- *oneLog)(chLog))
 	//listen http
-	go listenHTTP(ip, port, (chan<- *oneLog)(chLog))
+	go listenHTTP(ip, portHTTP, (chan<- *oneLog)(chLog))
 	//listen unix
-
 	//create log handler chain
+	lh := newLogHandler((<-chan *oneLog)(chLog))
+	//add debug suber
+	desb := newDebugerLogSuber("go_log:debugsuber")
+	lh.addSuber(desb)
+	//add socket suber
+	sioSb, err := newSocketIOLogSuber()
+	if err != nil {
+		log.Fatal(err)
+	}
+	lh.addSuber(sioSb)
+
+	//create web ui server
+	http.Handle("/", http.FileServer(http.Dir("./webui")))
+	http.Handle("/socket.io/", sioSb)
+	go http.ListenAndServe(fmt.Sprintf("%s:%d", ip.String(), portWebUI), nil)
+	//add file suber to put log on ground
+	//log handle, run
+	go lh.handle()
 	//stop here, wait
 	chWait := make(chan bool)
 	<-chWait
@@ -46,16 +66,31 @@ type logHTTPHandler struct {
 	chLog chan<- *oneLog
 }
 
+var (
+	rep_OK         = []byte("OK")
+	rep_NEED_PARAM = []byte("need namespace and category")
+)
+
 func (self *logHTTPHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	content, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		deMain("logHTTPHandler get req body:", err)
 		return
 	}
+	reqPath := req.URL.Path
+	ps := strings.Split(reqPath, "/")
+	deMain("ps:%d, reqpath:%s", len(ps), reqPath)
+	if len(ps) < 3 || ps[2] == "" || ps[1] == "" {
+		_, _ = w.Write(rep_NEED_PARAM)
+		return
+	}
 	l := &oneLog{
-		Content: content,
+		Namespace: ps[1],
+		Category:  ps[2],
+		Content:   content,
 	}
 	self.chLog <- l
+	_, _ = w.Write(rep_OK)
 }
 
 func listenTCP(ip net.IP, port int, ch chan<- *oneLog) {
